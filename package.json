@@ -1,0 +1,49 @@
+{
+  "name": "md-to-pdf",
+  "version": "2.0.0",
+  "description": "Convert Markdown files to beautifully formatted PDF documents with syntax highlighting, math support, and auto-generated Table of Contents",
+  "main": "lib/converter.js",
+  "bin": {
+    "md-to-pdf": "./cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js",
+    "convert": "node cli.js",
+    "legacy": "node super-convert.js",
+    "test": "node cli.js project.md -o test-output.pdf",
+    "help": "node cli.js --help"
+  },
+  "keywords": [
+    "markdown",
+    "pdf",
+    "converter",
+    "markdown-to-pdf",
+    "document",
+    "export",
+    "puppeteer",
+    "syntax-highlighting",
+    "mathjax"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "files": [
+    "cli.js",
+    "lib/",
+    "README.md"
+  ],
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^14.0.3",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.2",
+    "puppeteer-core": "^24.37.2"
+  }
+}
