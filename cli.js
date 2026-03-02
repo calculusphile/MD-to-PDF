@@ -30,7 +30,8 @@ program
     .option('--chrome-path <path>', 'Custom Chrome/Chromium executable path')
     .option('--no-toc', 'Disable Table of Contents generation')
     .option('--toc-title <title>', 'Custom Table of Contents title', 'Table of Contents')
-    .option('--toc-filter <pattern>', 'Regex pattern for TOC heading filter', 'Topic|Summary|Section|Detailed')
+    .option('--toc-filter <pattern>', 'Regex pattern to filter TOC headings (default: all headings)')
+    .option('--toc-depth <depth>', 'Maximum heading depth for TOC (1-6)', '3')
     .option('-f, --format <format>', 'Page format (A4, Letter, Legal, Tabloid)', 'A4')
     .option('-l, --landscape', 'Use landscape orientation')
     .option('--margin-top <margin>', 'Top margin (e.g., 25.4mm)', '25.4mm')
@@ -90,7 +91,8 @@ async function main() {
         chromePath: options.chromePath,
         noToc: !options.toc,
         tocTitle: options.tocTitle,
-        tocFilter: options.tocFilter,
+        tocFilter: options.tocFilter || null,
+        tocMaxDepth: parseInt(options.tocDepth, 10),
         format: options.format,
         landscape: options.landscape,
         marginTop: options.marginTop,

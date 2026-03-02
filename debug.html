@@ -1,16 +1,17 @@
-/**
- * @fileoverview CSS Styles Module
- * Contains all styling configurations for the PDF output.
- * Modify these styles to customize the appearance of generated PDFs.
- * 
- * @module lib/styles
- */
 
-/**
- * Default CSS styles for PDF generation
- * @type {string}
- */
-const defaultStyles = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            svg: { fontCache: 'global' }
+        };
+        </script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <style>
+            
 /* ========================
    BASE TYPOGRAPHY
    ======================== */
@@ -149,7 +150,7 @@ h1, h2, h3, h4 {
     page-break-after: avoid; 
 }
 
-img, table { 
+img, table, pre { 
     page-break-inside: avoid; 
 }
 
@@ -160,9 +161,7 @@ pre {
     background-color: #f6f8fa;
     padding: 15px;
     border-radius: 5px;
-    overflow-x: visible;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-x: auto;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 10pt;
     line-height: 1.4;
@@ -271,40 +270,14 @@ blockquote {
     background-color: #f9f9f9;
     font-style: italic;
 }
-`;
 
-/**
- * PDF page footer template
- * @type {string}
- */
-const footerTemplate = `
-<div style="font-size:10px; font-family:'Times New Roman'; text-align:center; width:100%; color:black;">
-    Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-</div>
-`;
+            
+        </style>
+    </head>
+    <body>
+        
+        <p><code>c int x = 5; void foo() {} </code></p>
 
-/**
- * PDF page header template (empty by default)
- * @type {string}
- */
-const headerTemplate = '<div></div>';
-
-/**
- * highlight.js theme CDN URL
- * @type {string}
- */
-const highlightTheme = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/arduino-light.min.css';
-
-/**
- * MathJax CDN URL
- * @type {string}
- */
-const mathJaxUrl = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
-
-module.exports = {
-    defaultStyles,
-    footerTemplate,
-    headerTemplate,
-    highlightTheme,
-    mathJaxUrl
-};
+    </body>
+    </html>
+    
