@@ -61,7 +61,8 @@ Options:
   --chrome-path <path>       Custom Chrome/Chromium executable path
   --no-toc                   Disable Table of Contents generation
   --toc-title <title>        Custom Table of Contents title (default: "Table of Contents")
-  --toc-filter <pattern>     Regex pattern for TOC heading filter (default: "Topic|Summary|Section|Detailed")
+  --toc-filter <pattern>     Regex pattern for TOC heading filter (default: all headings)
+  --toc-depth <depth>        Maximum heading depth for TOC, 1-6 (default: "3")
   -f, --format <format>      Page format: A4, Letter, Legal, Tabloid (default: "A4")
   -l, --landscape            Use landscape orientation
   --margin-top <margin>      Top margin (default: "25.4mm")
@@ -177,20 +178,28 @@ function hello(name) {
 
 ## Table of Contents Filtering
 
-By default, only headings containing specific keywords are included in the TOC:
-- Topic
-- Summary
-- Section
-- Detailed
+By default, **all headings** up to depth 3 (h1-h3) are included in the TOC. You can control this behavior:
 
-Customize with the `--toc-filter` option:
+### Limit TOC Depth
 
 ```bash
-# Include all Chapter and Section headings
+# Include headings up to h4
+node cli.js book.md --toc-depth 4
+
+# Only top-level headings
+node cli.js book.md --toc-depth 1
+```
+
+### Filter by Pattern
+
+Use `--toc-filter` to include only headings matching a regex:
+
+```bash
+# Include only Chapter and Section headings
 node cli.js book.md --toc-filter "Chapter|Section"
 
-# Include all headings (match everything)
-node cli.js book.md --toc-filter ".*"
+# Only headings starting with a number
+node cli.js book.md --toc-filter "^\d+\."
 ```
 
 ## Project Structure
@@ -198,6 +207,8 @@ node cli.js book.md --toc-filter ".*"
 ```
 md-to-pdf/
 ├── cli.js              # CLI entry point
+├── super-convert.js    # Legacy single-file converter
+├── debug.html          # Debug HTML output
 ├── lib/
 │   ├── converter.js    # Core conversion logic
 │   └── styles.js       # CSS styles configuration
@@ -211,7 +222,7 @@ md-to-pdf/
 
 | Script | Description |
 |--------|-------------|
-| `npm start` | Run CLI (prompts for args) |
+| `npm start` | Run CLI (requires args, e.g. `npm start -- file.md`) |
 | `npm run convert -- <file>` | Convert a file |
 | `npm run legacy` | Run original super-convert.js |
 | `npm run test` | Test conversion with project.md |

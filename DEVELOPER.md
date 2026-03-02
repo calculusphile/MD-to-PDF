@@ -89,7 +89,7 @@ md-to-pdf/
 ├── package.json           # Node.js project configuration
 │   └── Responsibility: Dependencies, scripts, metadata
 │
-├── project.md             # Sample markdown file for testing
+├── debug.html             # Debug output HTML (generated for inspection)
 │
 ├── README.md              # User documentation
 │
@@ -168,51 +168,38 @@ Raw Markdown → Cleaning Engine → Clean Markdown
 
 ---
 
-### Stage 4: Markdown Tokenization (converter.js → marked.lexer)
+### Stage 4: Markdown Parsing & Heading Extraction (converter.js → configureMarked + marked.parse)
 ```
-Clean Markdown → marked.lexer() → Token Array
+Clean Markdown → configureMarked() → marked.parse() → Body HTML + TOC Array
 ```
 
 **What happens:**
-1. `marked.lexer()` breaks markdown into tokens
-2. Each token represents: heading, paragraph, code block, etc.
-3. Tokens retain structural information (heading depth, language, etc.)
+1. `configureMarked()` sets up marked with two extensions:
+   - **markedHighlight** for syntax highlighting via highlight.js
+   - **Custom renderer** that intercepts headings to extract TOC entries and inject anchor IDs
+2. `marked.parse()` processes markdown in a single pass, producing HTML while the custom renderer simultaneously collects TOC entries.
+3. Heading extraction and HTML generation happen together — no separate token mutation step.
 
-**Token Example:**
+**Custom Renderer Logic:**
 ```javascript
 {
-    type: 'heading',
-    raw: '### Q.1) How is self-awareness important?',
-    depth: 3,
-    text: 'Q.1) How is self-awareness important?'
+    renderer: {
+        heading({ tokens, depth }) {
+            const text = this.parser.parseInline(tokens);
+            const cleanText = text.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').trim();
+            const anchor = cleanText.toLowerCase().replace(/[^\w]+/g, '-');
+
+            if (depth <= maxDepth) {
+                const isImportant = tocFilter ? tocFilter.test(cleanText) : true;
+                if (isImportant) {
+                    toc.push({ anchor, level: depth, text: cleanText });
+                }
+            }
+
+            return `<h${depth} id="${anchor}">${text}</h${depth}>`;
+        }
+    }
 }
-```
-
-**Affects:**
-- Token structure determines how content is processed
-- Heading tokens trigger TOC extraction
-
----
-
-### Stage 5: Heading Extraction & TOC Building (converter.js → extractHeadings)
-```
-Token Array → extractHeadings() → TOC Array + Modified Tokens
-```
-
-**What happens:**
-1. Scans tokens for `type: 'heading'`
-2. Filters by depth (default: ≤4 for h1-h4)
-3. Applies TOC filter regex (default: `Topic|Summary|Section|Detailed`)
-4. Generates URL-safe anchor IDs
-5. **MUTATES** original tokens to inject anchor IDs
-
-**Critical Mutation:**
-```javascript
-// Original token
-{ type: 'heading', depth: 3, text: 'Q.1) Self-awareness' }
-
-// After processing
-{ type: 'html', text: '<h3 id="q1-self-awareness">Q.1) Self-awareness</h3>' }
 ```
 
 **TOC Entry Generated:**
@@ -226,26 +213,27 @@ Token Array → extractHeadings() → TOC Array + Modified Tokens
 
 **Affects:**
 - TOC links must match anchor IDs exactly
-- Changing filter regex changes what appears in TOC
-- Mutation means original tokens can't be reused
+- When no `--toc-filter` is provided, **all headings** up to `maxDepth` are included in the TOC
+- When `--toc-filter` is provided, only matching headings are included
+- No token mutation — heading extraction is a side effect of the renderer
 
 ---
 
-### Stage 6: HTML Generation (converter.js → marked.parser + templates)
+### Stage 5: HTML Generation (converter.js → generateTocHtml + generateFullHtml)
 ```
-Modified Tokens → marked.parser() → Body HTML
-TOC Array → generateTocHtml() → TOC HTML
-Body + TOC + Styles → generateFullHtml() → Complete HTML Document
+Body HTML (from marked.parse)  ─┐
+TOC Array (from configureMarked) ─┼─→ generateFullHtml() → Complete HTML Document
+CSS Styles (from styles.js)    ─┘
 ```
 
 **What happens:**
-1. `marked.parser()` converts tokens to HTML strings
-2. TOC HTML generated with anchor links
+1. `marked.parse()` already produced the body HTML in Stage 4
+2. TOC HTML generated from collected entries via `generateTocHtml()`
 3. Full document assembled with:
    - DOCTYPE and meta tags
-   - External CSS (highlight.js theme)
    - MathJax script for equations
-   - Inline CSS from styles.js
+   - Inline CSS from `styles.js` (includes syntax highlighting styles)
+   - Optional custom CSS
    - TOC HTML
    - Body content HTML
 
@@ -254,16 +242,15 @@ Body + TOC + Styles → generateFullHtml() → Complete HTML Document
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- highlight.js theme -->
-    <link rel="stylesheet" href="...">
-    
     <!-- MathJax configuration -->
     <script>window.MathJax = {...}</script>
     <script src="mathjax"></script>
     
-    <!-- Inline styles -->
+    <!-- Inline styles (from lib/styles.js) -->
     <style>
-        /* From lib/styles.js */
+        /* Base typography, TOC, headings, tables,
+           code blocks, syntax highlighting (GitHub-style),
+           blockquotes, print optimization */
     </style>
 </head>
 <body>
@@ -279,12 +266,13 @@ Body + TOC + Styles → generateFullHtml() → Complete HTML Document
 
 **Affects:**
 - Styles in this stage determine final PDF appearance
-- CDN URLs must be accessible for syntax highlighting and math
+- Syntax highlighting CSS is bundled inline (no external CDN needed)
+- MathJax CDN URL must be accessible for math rendering
 - Page breaks controlled by CSS classes
 
 ---
 
-### Stage 7: Browser Launch (converter.js → puppeteer.launch)
+### Stage 6: Browser Launch (converter.js → puppeteer.launch)
 ```
 Chrome Path → puppeteer.launch() → Browser Instance
 ```
@@ -319,7 +307,7 @@ process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe'
 
 ---
 
-### Stage 8: PDF Rendering (converter.js → page.pdf)
+### Stage 7: PDF Rendering (converter.js → page.pdf)
 ```
 HTML String → page.setContent() → Rendered Page → page.pdf() → PDF File
 ```
@@ -399,7 +387,8 @@ async function main() {
 | `--chrome-path` | options.chromePath | auto-detect |
 | `--no-toc` | options.noToc | false |
 | `--toc-title` | options.tocTitle | "Table of Contents" |
-| `--toc-filter` | options.tocFilter | "Topic\|Summary\|..." |
+| `--toc-filter` | options.tocFilter | null (all headings) |
+| `--toc-depth` | options.tocMaxDepth | 3 |
 | `--format` | options.format | "A4" |
 | `--landscape` | options.landscape | false |
 | `--margin-*` | options.margin* | "25.4mm" |
@@ -417,27 +406,31 @@ async function main() {
 | `convertMdToPdf()` | Main conversion | Creates PDF file |
 | `findChromePath()` | Browser detection | None (pure function) |
 | `cleanMarkdownContent()` | Sanitize markdown | None (pure function) |
-| `extractHeadings()` | Build TOC | **MUTATES tokens array** |
+| `configureMarked()` | Setup parser + heading extraction | Modifies marked global state, collects TOC entries |
+| `extractHeadings()` | **No-op** (backward compat) | None — heading extraction moved into `configureMarked()` |
 | `generateTocHtml()` | Create TOC HTML | None (pure function) |
 | `generateFullHtml()` | Assemble document | None (pure function) |
-| `configureMarked()` | Setup parser | Modifies marked global state |
 
-#### Critical: Token Mutation
+#### Heading Extraction via Custom Renderer
 
-The `extractHeadings()` function **MUTATES** the input token array:
+Heading extraction is handled inside `configureMarked()` using a custom marked renderer extension. When `marked.parse()` encounters a heading, the renderer:
+
+1. Extracts clean text (strips HTML tags and markdown formatting)
+2. Generates an anchor ID from the heading text
+3. Pushes matching headings into the TOC array (a closure variable)
+4. Returns HTML with the anchor ID injected
 
 ```javascript
-// BEFORE extractHeadings()
-tokens[5] = { type: 'heading', depth: 3, text: 'Section 1' }
-
-// AFTER extractHeadings()  
-tokens[5] = { type: 'html', text: '<h3 id="section-1">Section 1</h3>' }
+// During marked.parse(), the renderer intercepts headings:
+// Input: ### Section 1
+// Output HTML: <h3 id="section-1">Section 1</h3>
+// Side effect: toc.push({ anchor: 'section-1', level: 3, text: 'Section 1' })
 ```
 
 **Why this matters:**
-- Tokens cannot be reused after extraction
-- The mutation injects anchor IDs for TOC linking
-- If you need original tokens, clone before calling
+- No token mutation — cleaner architecture than the legacy approach
+- `extractHeadings()` is kept as a no-op for backward compatibility
+- The TOC array is returned by `configureMarked()` and passed to `generateTocHtml()`
 
 ---
 
@@ -558,19 +551,39 @@ pre, table { page-break-inside: avoid; }
 
 ---
 
-### extractHeadings(tokens, options)
+### configureMarked(tocOptions)
 
-**Builds TOC and adds anchor IDs.**
+**Configures marked with syntax highlighting and optional heading extraction for TOC.**
 
 ```javascript
 /**
- * @param {Array} tokens - Marked lexer tokens (WILL BE MUTATED)
- * @param {Object} options - { tocFilter: RegExp, maxDepth: number }
- * @returns {Array<{anchor: string, level: number, text: string}>}
+ * @param {Object|null} tocOptions - Options for TOC heading extraction (null to skip TOC)
+ * @param {RegExp|null} tocOptions.tocFilter - Regex to filter headings for TOC (null = all)
+ * @param {number} tocOptions.maxDepth - Max heading depth to include (default: 3)
+ * @returns {Array<{anchor: string, level: number, text: string}>} Collected TOC entries
  */
 ```
 
-**⚠️ WARNING:** This function mutates the input array!
+Sets up two marked extensions:
+1. `markedHighlight` for syntax highlighting via highlight.js
+2. Custom renderer for heading extraction and anchor ID injection
+
+The returned array is populated during `marked.parse()` and should be passed to `generateTocHtml()`.
+
+---
+
+### extractHeadings(tokens, options)
+
+**No-op stub for backward compatibility.**
+
+```javascript
+/**
+ * @deprecated Heading extraction is now handled by configureMarked().
+ * @returns {Array} Always returns empty array
+ */
+```
+
+This function was kept to avoid breaking any external code that may call it.
 
 ---
 
@@ -597,7 +610,7 @@ Supported units:
 
 ### TOC Filter Patterns
 
-**Default:** `Topic|Summary|Section|Detailed`
+**Default:** `null` (all headings up to `--toc-depth` are included)
 
 **Examples:**
 ```bash
@@ -607,7 +620,7 @@ Supported units:
 # Only questions
 --toc-filter "^Q\."
 
-# Everything (no filter)
+# Explicitly match everything (same as default)
 --toc-filter ".*"
 
 # Numbered items
@@ -669,8 +682,9 @@ We use `puppeteer-core` because:
 ### Changing TOC Filter
 
 ```javascript
-// Default: Topic|Summary|Section|Detailed
-// Change to: Chapter|Unit
+// Default: null (all headings included)
+// Change to: only Chapter|Unit headings
+// CLI: --toc-filter "Chapter|Unit"
 ```
 
 | What Changes | What Stays Same |
@@ -814,18 +828,16 @@ const footerTemplate = `
 
 ### Include ALL Headings in TOC
 
-**Option 1:** CLI flag
+By default, all headings up to `--toc-depth` (default: 3) are already included in the TOC.
+
+To include deeper headings:
 ```bash
-node cli.js input.md --toc-filter ".*"
+node cli.js input.md --toc-depth 6
 ```
 
-**Option 2:** Change default in converter.js
-```javascript
-// Find:
-tocFilter = 'Topic|Summary|Section|Detailed'
-
-// Change to:
-tocFilter = '.*'  // Match everything
+To filter to specific headings only:
+```bash
+node cli.js input.md --toc-filter "Chapter|Section"
 ```
 
 ---
@@ -980,4 +992,4 @@ npm run test
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*
